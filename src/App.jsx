@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 
-function App() {
+  function App() {
+
+  
+
+
   // ==========================================
   // PROFILE
   // ==========================================
@@ -28,6 +32,9 @@ function App() {
   // ==========================================
 
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const [profilePhoto, setProfilePhoto] = useState(
+  localStorage.getItem("wellsbProfilePhoto") || ""
+);
 
   // ==========================================
   // GREETING
@@ -118,6 +125,40 @@ function App() {
       [name]: value,
     }));
   }
+  
+// ADD THE NEW FUNCTION HERE
+function handlePhotoUpload(event) {
+  const file = event.target.files[0];
+
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    alert("Please select an image file.");
+    return;
+  }
+
+  if (file.size > 2 * 1024 * 1024) {
+    alert("Please choose an image smaller than 2 MB.");
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    const photo = reader.result;
+
+    try {
+      localStorage.setItem("wellsbProfilePhoto", photo);
+      setProfilePhoto(photo);
+    } catch (error) {
+      alert("This photo could not be saved. Please choose a smaller image.");
+    }
+  };
+
+  reader.readAsDataURL(file);
+}
+
+// Your next existing function stays below
 
   // ==========================================
   // SAVE PROFILE
@@ -273,7 +314,7 @@ function App() {
   // DASHBOARD
   // ==========================================
 
-  function Dashboard() {
+   function Dashboard() {
     return (
       <>
         <div className="topbar">
@@ -282,23 +323,35 @@ function App() {
               {greeting},{" "}
               {profile.fullName ? firstName : "there"} 👋
             </h2>
+            <p>Your personal wellness dashboard</p>
+          </div>
 
-            <p>
-              Your personal wellness dashboard
-            </p>
+          <div className="dashboard-profile-photo">
+            {profilePhoto ? (
+              <img
+                src={profilePhoto}
+                alt="Profile"
+                className="profile-photo"
+              />
+            ) : (
+              profile.fullName
+                ? firstName.charAt(0).toUpperCase()
+                : "U"
+            )}
           </div>
 
           <div className="status-group">
             <span className="status-badge active-status">
-              ● System Active
+              â— System Active
             </span>
-
             <span className="status-badge watch-status">
-              ⌚ Watch Connected
+              âŒš Watch Connected
             </span>
           </div>
         </div>
 
+  
+          
         {/* STAT CARDS */}
 
         <div className="cards four-columns">
@@ -379,7 +432,7 @@ function App() {
           </div>
 
           <div className="card">
-            <div className="card-icon purple-icon">⚖️</div>
+            <div className="card-icon purple-icon">âš–ï¸</div>
 
             <div className="card-title">
               BMI
@@ -417,7 +470,7 @@ function App() {
           <div className="summary-grid">
 
             <div className="summary-card">
-              <div className="summary-icon">❤️</div>
+              <div className="summary-icon">â¤ï¸</div>
 
               <div>
                 <h4>Activity</h4>
@@ -471,7 +524,7 @@ function App() {
               onClick={() => navigateTo("activity")}
               className="quick-btn"
             >
-              ❤️
+              â¤ï¸
               <span>Health & Activity</span>
             </button>
 
@@ -495,7 +548,7 @@ function App() {
               onClick={() => navigateTo("ai")}
               className="quick-btn"
             >
-              ✨
+              âœ¨
               <span>AI Insights</span>
             </button>
           </div>
@@ -512,7 +565,7 @@ function App() {
     return (
       <>
         <PageHeader
-          title="❤️ Health & Activity"
+          title="â¤ï¸ Health & Activity"
           subtitle="Monitor your daily physical activity."
         />
 
@@ -666,7 +719,7 @@ function App() {
             value="Good"
             description="Based on your data"
             color="green"
-            icon="✨"
+            icon="âœ¨"
           />
 
           <StatCard
@@ -708,12 +761,12 @@ function App() {
     return (
       <>
         <PageHeader
-          title="⌚ WELLsB Watch"
+          title="âŒš WELLsB Watch"
           subtitle="Smartwatch connection and health data."
         />
 
         <div className="watch-connected">
-          <span>●</span>
+          <span>â—</span>
           Connected
         </div>
 
@@ -724,7 +777,7 @@ function App() {
           <div className="activity-list">
 
             <ActivityRow
-              icon="⌚"
+              icon="âŒš"
               title="Device"
               value="WELLsB Watch"
             />
@@ -743,7 +796,7 @@ function App() {
             />
 
             <ActivityRow
-              icon="❤️"
+              icon="â¤ï¸"
               title="Heart Rate"
               value={`${heartRate} BPM`}
             />
@@ -758,7 +811,7 @@ function App() {
           <div className="watch-grid">
 
             <div className="watch-card">
-              <span>❤️</span>
+              <span>â¤ï¸</span>
               <strong>{heartRate}</strong>
               <small>BPM</small>
             </div>
@@ -797,7 +850,7 @@ function App() {
     return (
       <>
         <PageHeader
-          title="✨ AI Insights"
+          title="âœ¨ AI Insights"
           subtitle="Personalized wellness recommendations."
         />
 
@@ -806,7 +859,7 @@ function App() {
           <div className="ai-large">
 
             <div className="ai-large-icon">
-              ✨
+              âœ¨
             </div>
 
             <div>
@@ -863,7 +916,7 @@ function App() {
     return (
       <>
         <PageHeader
-          title="⚡ Energy Balance"
+          title="âš¡ Energy Balance"
           subtitle="Understand your daily energy balance."
         />
 
@@ -890,7 +943,7 @@ function App() {
             value="+992"
             description="Estimated balance"
             color="blue"
-            icon="⚡"
+            icon="âš¡"
           />
         </div>
 
@@ -901,7 +954,7 @@ function App() {
           <div className="ai-box">
 
             <div className="ai-title">
-              ⚡ Your Energy Balance
+              âš¡ Your Energy Balance
             </div>
 
             <p>
@@ -928,26 +981,34 @@ function App() {
           subtitle="Manage your personal wellness information."
         />
 
-        <div className="profile-hero">
-
+                <div className="profile-hero">
           <div className="profile-avatar">
-
-            {profile.fullName
-              ? firstName.charAt(0).toUpperCase()
-              : "U"}
-
+            {profilePhoto ? (
+              <img
+                src={profilePhoto}
+                alt="Profile"
+                className="profile-photo"
+              />
+            ) : (
+              profile.fullName
+                ? firstName.charAt(0).toUpperCase()
+                : "U"
+            )}
           </div>
 
+          <label className="photo-upload-button">
+            Change Profile Photo
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              hidden
+            />
+          </label>
+
           <div>
-
-            <h2>
-              {profile.fullName || "Your Profile"}
-            </h2>
-
-            <p>
-              Personal Wellness Profile
-            </p>
-
+            <h2>{profile.fullName || "Your Profile"}</h2>
+            <p>Personal Wellness Profile</p>
           </div>
         </div>
 
@@ -966,13 +1027,20 @@ function App() {
 
           <div className="form-grid">
 
-            <FormInput
-              label="Full Name"
-              name="fullName"
-              value={profile.fullName}
-              onChange={handleChange}
-              placeholder="Enter your full name"
-            />
+        
+   
+
+<div className="form-group">
+  <label>Full Name</label>
+  <input
+    type="text"
+    name="fullName"
+    value={profile.fullName}
+    onChange={handleChange}
+    placeholder="Enter your full name"
+  />
+</div>
+
 
             <FormInput
               label="Email Address"
@@ -1115,7 +1183,7 @@ function App() {
 
           {saved && (
             <div className="success-message">
-              ✓ Your profile has been saved successfully!
+              âœ“ Your profile has been saved successfully!
             </div>
           )}
         </div>
@@ -1141,7 +1209,7 @@ function App() {
               value={profile.weight || "--"}
               description="kilograms"
               color="orange"
-              icon="⚖️"
+              icon="âš–ï¸"
             />
 
             <StatCard
@@ -1152,11 +1220,15 @@ function App() {
               icon="📊"
             />
 
-          </div>
+      
+              </div>
         </div>
       </>
     );
   }
+
+  // ==========================================
+  // SETTINGS
 
   // ==========================================
   // SETTINGS
@@ -1165,9 +1237,9 @@ function App() {
   function SettingsPage() {
     return (
       <>
-        <PageHeader
-          title="⚙️ Settings"
-          subtitle="Manage your WELLsB preferences."
+                <PageHeader
+          title="👤 My Profile"
+          subtitle="Manage your personal wellness information."
         />
 
         <div className="section">
@@ -1189,7 +1261,7 @@ function App() {
 
             <div className="setting-row">
               <div>
-                <strong>⌚ Watch Sync</strong>
+                <strong>âŒš Watch Sync</strong>
                 <p>Automatically synchronize watch data.</p>
               </div>
 
@@ -1200,7 +1272,7 @@ function App() {
 
             <div className="setting-row">
               <div>
-                <strong>✨ AI Insights</strong>
+                <strong>âœ¨ AI Insights</strong>
                 <p>Personalized wellness recommendations.</p>
               </div>
 
@@ -1430,7 +1502,8 @@ function App() {
         return <EnergyPage />;
 
       case "profile":
-        return <ProfilePage />;
+  
+        return ProfilePage();
 
       case "settings":
         return <SettingsPage />;
@@ -1482,13 +1555,13 @@ function App() {
         </div>
 
         <NavButton
-          icon="🏠"
+          icon="� "
           label="Dashboard"
           page="dashboard"
         />
 
         <NavButton
-          icon="❤️"
+          icon="â¤ï¸"
           label="Health & Activity"
           page="activity"
         />
@@ -1510,19 +1583,19 @@ function App() {
         </div>
 
         <NavButton
-          icon="⌚"
+          icon="âŒš"
           label="Smartwatch"
           page="watch"
         />
 
         <NavButton
-          icon="✨"
+          icon="âœ¨"
           label="AI Insights"
           page="ai"
         />
 
         <NavButton
-          icon="⚡"
+          icon="âš¡"
           label="Energy Balance"
           page="energy"
         />
@@ -1538,7 +1611,7 @@ function App() {
         />
 
         <NavButton
-          icon="⚙️"
+          icon="⚙️"
           label="Settings"
           page="settings"
         />
@@ -1577,7 +1650,7 @@ function App() {
               setMobileMenu(!mobileMenu)
             }
           >
-            ☰
+            â˜°
           </button>
 
           <strong>
@@ -1594,3 +1667,5 @@ function App() {
 }
 
 export default App;
+
+
