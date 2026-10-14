@@ -47,6 +47,13 @@ import { useEffect, useState } from "react";
   // ==========================================
 
   const [saved, setSaved] = useState(false);
+ // FOOD PHOTO
+ 
+const [foodPhoto, setFoodPhoto] = useState("");
+const [foodMessage, setFoodMessage] = useState("");
+const [foodAnalysis, setFoodAnalysis] = useState(null);
+const [foodLoading, setFoodLoading] = useState(false);
+
 
   // ==========================================
   // MOBILE SIDEBAR
@@ -127,6 +134,69 @@ import { useEffect, useState } from "react";
   }
   
 // ADD THE NEW FUNCTION HERE
+
+// FOOD PHOTO UPLOAD
+
+async function handleFoodPhotoUpload(event) {
+  const file = event.target.files[0];
+
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    alert("Please choose a food image.");
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    alert("Please choose an image smaller than 5 MB.");
+    return;
+  }
+
+  // Show the selected photo immediately
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    setFoodPhoto(reader.result);
+  };
+
+  reader.readAsDataURL(file);
+
+  // Clear old results and start AI analysis
+  setFoodAnalysis(null);
+  setFoodLoading(true);
+  setFoodMessage("🔍 AI is identifying your food and estimating calories...");
+
+  try {
+    const formData = new FormData();
+    formData.append("image", file);
+
+    const response = await fetch(
+      "https://wellsb-frontend.onrender.com/analyze-food",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || result.status !== "success") {
+      throw new Error(result.error || "Food analysis failed.");
+    }
+
+    setFoodAnalysis(result.analysis);
+    setFoodMessage("✅ Food photo analysed successfully!");
+  } catch (error) {
+    console.error("Food AI error:", error);
+    setFoodMessage(
+      "⚠️ Could not analyse the photo. Check that your backend is running and try again."
+    );
+  } finally {
+    setFoodLoading(false);
+  }
+}
+
+// Your next existing function stays below
 function handlePhotoUpload(event) {
   const file = event.target.files[0];
 
@@ -145,11 +215,9 @@ function handlePhotoUpload(event) {
   const reader = new FileReader();
 
   reader.onload = () => {
-    const photo = reader.result;
-
     try {
-      localStorage.setItem("wellsbProfilePhoto", photo);
-      setProfilePhoto(photo);
+      localStorage.setItem("wellsbProfilePhoto", reader.result);
+      setProfilePhoto(reader.result);
     } catch (error) {
       alert("This photo could not be saved. Please choose a smaller image.");
     }
@@ -157,9 +225,6 @@ function handlePhotoUpload(event) {
 
   reader.readAsDataURL(file);
 }
-
-// Your next existing function stays below
-
   // ==========================================
   // SAVE PROFILE
   // ==========================================
@@ -342,7 +407,7 @@ function handlePhotoUpload(event) {
 
           <div className="status-group">
             <span className="status-badge active-status">
-              â— System Active
+              🟢 System Active
             </span>
             <span className="status-badge watch-status">
               âŒš Watch Connected
@@ -638,6 +703,92 @@ function handlePhotoUpload(event) {
   function NutritionPage() {
     return (
       <>
+        {/* FOOD PHOTO ANALYSIS */}
+
+        <div className="section">
+          <h3>📸 AI Food Scanner</h3>
+
+          <p>
+            Take a photo or upload a food image to prepare it
+            for nutritional analysis.
+          </p>
+
+          <div className="ai-box">
+            <label className="photo-upload-button">
+              📷 Take Photo or Upload Food
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFoodPhotoUpload}
+                hidden
+              />
+            </label>
+
+            {foodPhoto && (
+              <div style={{ marginTop: "20px" }}>
+                <img
+                  src={foodPhoto}
+                  alt="Selected food"
+                  style={{
+                    width: "100%",
+                    maxWidth: "350px",
+                    maxHeight: "300px",
+                    objectFit: "contain",
+                    borderRadius: "12px",
+                  }}
+                />
+
+                <p>✅ Food photo selected successfully.</p>
+              </div>
+            )}
+            {foodMessage && (
+  <p role="status">{foodMessage}</p>
+)}
+
+           
+{foodLoading && (
+  <p>⏳ Analysing your food photo...</p>
+)}
+
+{foodAnalysis && (
+  <div className="ai-box" style={{ marginTop: "16px" }}>
+    <h3>🍽️ AI Food Analysis</h3>
+
+    <p>
+      <strong>Food:</strong> {foodAnalysis.food_name}
+    </p>
+
+    <h2>🔥 {foodAnalysis.calories} kcal</h2>
+
+    <p>
+      🥩 Protein: {foodAnalysis.protein_g} g
+    </p>
+
+    <p>
+      🍞 Carbohydrates: {foodAnalysis.carbs_g} g
+    </p>
+
+    <p>
+      🥑 Fat: {foodAnalysis.fat_g} g
+    </p>
+
+    <p>
+      📏 Portion: {foodAnalysis.portion_estimate}
+    </p>
+
+    <p>
+      ℹ️ {foodAnalysis.notes}
+    </p>
+
+    <p>
+      Confidence: {foodAnalysis.confidence}
+    </p>
+  </div>
+)}
+
+          </div>
+        </div>
         <PageHeader
           title="🥗 Nutrition"
           subtitle="Keep track of your daily nutrition."
@@ -766,7 +917,7 @@ function handlePhotoUpload(event) {
         />
 
         <div className="watch-connected">
-          <span>â—</span>
+          <span>🟢</span>
           Connected
         </div>
 
@@ -777,7 +928,7 @@ function handlePhotoUpload(event) {
           <div className="activity-list">
 
             <ActivityRow
-              icon="âŒš"
+              icon="⌚"
               title="Device"
               value="WELLsB Watch"
             />
@@ -1183,7 +1334,7 @@ function handlePhotoUpload(event) {
 
           {saved && (
             <div className="success-message">
-              âœ“ Your profile has been saved successfully!
+             ✓  Your profile has been saved successfully!
             </div>
           )}
         </div>
@@ -1209,7 +1360,7 @@ function handlePhotoUpload(event) {
               value={profile.weight || "--"}
               description="kilograms"
               color="orange"
-              icon="âš–ï¸"
+              icon="⚖️"
             />
 
             <StatCard
@@ -1555,13 +1706,13 @@ function handlePhotoUpload(event) {
         </div>
 
         <NavButton
-          icon="� "
+          icon="🏠"
           label="Dashboard"
           page="dashboard"
         />
 
         <NavButton
-          icon="â¤ï¸"
+          icon="❤️"
           label="Health & Activity"
           page="activity"
         />
@@ -1589,13 +1740,13 @@ function handlePhotoUpload(event) {
         />
 
         <NavButton
-          icon="âœ¨"
+          icon="✨"
           label="AI Insights"
           page="ai"
         />
 
         <NavButton
-          icon="âš¡"
+          icon="⚡"
           label="Energy Balance"
           page="energy"
         />
@@ -1611,7 +1762,7 @@ function handlePhotoUpload(event) {
         />
 
         <NavButton
-          icon="⚙️"
+          icon="⚙️"
           label="Settings"
           page="settings"
         />
@@ -1650,7 +1801,7 @@ function handlePhotoUpload(event) {
               setMobileMenu(!mobileMenu)
             }
           >
-            â˜°
+            ☰
           </button>
 
           <strong>
