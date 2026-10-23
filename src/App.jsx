@@ -363,33 +363,66 @@ function handlePhotoUpload(event) {
   // AI INSIGHT
   // ==========================================
 
-  function getAIInsight() {
-    if (!profile.fullName) {
-      return "Complete your personal profile so WELLsB can provide more personalized wellness recommendations.";
-    }
-
-    let message = `Hello ${firstName}! `;
-
-    if (profile.fitnessGoal) {
-      message += `Your current goal is ${profile.fitnessGoal.toLowerCase()}. `;
-    }
-
-    if (profile.activityLevel) {
-      message += `Your activity level is ${profile.activityLevel.toLowerCase()}. `;
-    }
-
-    if (profile.stepGoal) {
-      message += `Your daily step target is ${Number(
-        profile.stepGoal
-      ).toLocaleString()} steps. `;
-    }
-
-    if (profile.sleepGoal) {
-      message += `Aim for around ${profile.sleepGoal} hours of sleep each night. `;
-    }
-
-    return message;
+  
+function getAIInsight() {
+  if (!profile.fullName) {
+    return "Complete your personal profile so WELLsB can provide more personalized wellness recommendations.";
   }
+
+  let message = `Hello ${firstName}! `;
+
+  if (profile.fitnessGoal) {
+    message += `Your current goal is ${profile.fitnessGoal.toLowerCase()}. `;
+  }
+
+  if (profile.activityLevel) {
+    message += `Your activity level is ${profile.activityLevel.toLowerCase()}. `;
+  }
+
+  if (profile.stepGoal) {
+    message += `Your daily step target is ${Number(
+      profile.stepGoal
+    ).toLocaleString()} steps. `;
+  }
+
+  if (profile.sleepGoal) {
+    message += `Aim for around ${profile.sleepGoal} hours of sleep each night. `;
+  }
+
+  // Activity guidance using the current dashboard values
+  if (typeof currentSteps !== "undefined" && Number(profile.stepGoal) > 0) {
+    if (currentSteps >= Number(profile.stepGoal)) {
+      message += "Great work! You have reached your daily step target. ";
+    } else {
+      const remainingSteps = Number(profile.stepGoal) - currentSteps;
+      message += `You are ${remainingSteps.toLocaleString()} steps away from your daily target. A short walk may help. `;
+    }
+  }
+
+  // Sleep guidance using the current dashboard values
+  if (typeof currentSleep !== "undefined" && Number(profile.sleepGoal) > 0) {
+    if (currentSleep >= Number(profile.sleepGoal)) {
+      message += "Your recorded sleep meets your personal goal. Keep maintaining a regular sleep routine. ";
+    } else {
+      message += "Your recorded sleep is below your personal goal. Consider a consistent bedtime routine. ";
+    }
+  }
+
+  // Hydration guidance using the current dashboard values
+  if (typeof currentWater !== "undefined" && Number(profile.waterGoal) > 0) {
+    if (currentWater >= Number(profile.waterGoal)) {
+      message += "You have reached your daily water target. Keep drinking water regularly. ";
+    } else {
+      const remainingWater = Number(profile.waterGoal) - currentWater;
+      message += `You are ${remainingWater.toFixed(1)} litres below your daily water target. Remember to drink water regularly. `;
+    }
+  }
+
+  message += "These recommendations use the wellness information currently available in your app.";
+
+  return message;
+}
+
 
   // ==========================================
   // SIDEBAR BUTTON
@@ -1122,34 +1155,46 @@ function handlePhotoUpload(event) {
             </div>
           </div>
 
-          <div className="insight-grid">
+          
+<div className="insight-grid">
+  <div className="insight-card">
+    <span>👟</span>
+    <h4>Activity</h4>
+    <p>
+      {Number(profile.stepGoal) > 0
+        ? Number(currentSteps) >= Number(profile.stepGoal)
+          ? `Excellent! You have reached your daily goal of ${Number(profile.stepGoal).toLocaleString()} steps. Keep moving regularly.`
+          : `You have completed ${Number(currentSteps).toLocaleString()} of ${Number(profile.stepGoal).toLocaleString()} steps. ${(Number(profile.stepGoal) - Number(currentSteps)).toLocaleString()} steps remain to reach your goal.`
+        : "Set your daily step goal in your profile to receive personalized activity advice."}
+    </p>
+  </div>
 
-            <div className="insight-card">
-              <span>👟</span>
-              <h4>Activity</h4>
-              <p>
-                Keep moving toward your daily step
-                target.
-              </p>
-            </div>
+  <div className="insight-card">
+    <span>🌙</span>
+    <h4>Sleep</h4>
+    <p>
+      {Number(profile.sleepGoal) > 0
+        ? Number(currentSleep) >= Number(profile.sleepGoal)
+          ? `Great! Your recorded sleep of ${currentSleep} hours meets your ${profile.sleepGoal}-hour goal. Maintain a regular sleep schedule.`
+          : `Your recorded sleep is ${currentSleep} hours, compared with your ${profile.sleepGoal}-hour goal. Consider a consistent bedtime routine.`
+        : "Set your sleep goal in your profile to receive personalized sleep advice."}
+    </p>
+  </div>
 
-            <div className="insight-card">
-              <span>🌙</span>
-              <h4>Sleep</h4>
-              <p>
-                Aim for your personal sleep goal every
-                night.
-              </p>
-            </div>
+  <div className="insight-card">
+    <span>💧</span>
+    <h4>Hydration</h4>
+    <p>
+      {Number(profile.waterGoal) > 0
+        ? Number(currentWater) >= Number(profile.waterGoal)
+          ? `Well done! Your recorded water intake of ${currentWater} litres meets your ${profile.waterGoal}-litre daily goal.`
+          : `Your recorded water intake is ${currentWater} litres. You need another ${(Number(profile.waterGoal) - Number(currentWater)).toFixed(1)} litres to reach your ${profile.waterGoal}-litre goal.`
+        : "Set your daily water goal in your profile to receive personalized hydration advice."}
+    </p>
+ 
+  </div>
+</div>
 
-            <div className="insight-card">
-              <span>💧</span>
-              <h4>Hydration</h4>
-              <p>
-                Stay hydrated throughout the day.
-              </p>
-            </div>
-          </div>
         </div>
       </>
     );
@@ -1158,6 +1203,8 @@ function handlePhotoUpload(event) {
   // ==========================================
   // ENERGY
   // ==========================================
+
+  
 
   function EnergyPage() {
     return (
