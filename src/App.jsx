@@ -364,13 +364,15 @@ function handlePhotoUpload(event) {
   // ==========================================
 
   
+
 function getAIInsight() {
-  if (!profile.fullName) {
-    return "Complete your personal profile so WELLsB can provide more personalized wellness recommendations.";
-  }
+ let message = profile.fullName
+  ? `Hello ${firstName}! `
+  : "Here are your latest wellness insights. ";
 
-  let message = `Hello ${firstName}! `;
-
+if (!profile.fullName) {
+  message += "Complete your personal profile for more personalized recommendations. ";
+}
   if (profile.fitnessGoal) {
     message += `Your current goal is ${profile.fitnessGoal.toLowerCase()}. `;
   }
@@ -389,7 +391,7 @@ function getAIInsight() {
     message += `Aim for around ${profile.sleepGoal} hours of sleep each night. `;
   }
 
-  // Activity guidance using the current dashboard values
+  // Activity guidance
   if (typeof currentSteps !== "undefined" && Number(profile.stepGoal) > 0) {
     if (currentSteps >= Number(profile.stepGoal)) {
       message += "Great work! You have reached your daily step target. ";
@@ -399,7 +401,7 @@ function getAIInsight() {
     }
   }
 
-  // Sleep guidance using the current dashboard values
+  // Sleep guidance
   if (typeof currentSleep !== "undefined" && Number(profile.sleepGoal) > 0) {
     if (currentSleep >= Number(profile.sleepGoal)) {
       message += "Your recorded sleep meets your personal goal. Keep maintaining a regular sleep routine. ";
@@ -408,7 +410,7 @@ function getAIInsight() {
     }
   }
 
-  // Hydration guidance using the current dashboard values
+  // Hydration guidance
   if (typeof currentWater !== "undefined" && Number(profile.waterGoal) > 0) {
     if (currentWater >= Number(profile.waterGoal)) {
       message += "You have reached your daily water target. Keep drinking water regularly. ";
@@ -418,6 +420,56 @@ function getAIInsight() {
     }
   }
 
+  // NEW: Food scanner insights
+  if (
+    typeof foodAnalysis !== "undefined" &&
+    foodAnalysis &&
+    foodAnalysis.food_name
+  ) {
+    const food = foodAnalysis;
+    const foodName = String(food.food_name).toLowerCase();
+
+    message += `Your latest scanned meal was identified as ${food.food_name}. `;
+
+    if (Number.isFinite(Number(food.calories))) {
+      message += `Its estimated energy content is ${Number(food.calories)} calories. `;
+    }
+
+    if (Number.isFinite(Number(food.protein_g))) {
+      message += `It contains an estimated ${Number(food.protein_g)} grams of protein. `;
+    }
+
+    if (Number.isFinite(Number(food.carbs_g))) {
+      message += `It contains an estimated ${Number(food.carbs_g)} grams of carbohydrates. `;
+    }
+
+    if (Number.isFinite(Number(food.fat_g))) {
+      message += `It contains an estimated ${Number(food.fat_g)} grams of fat. `;
+    }
+
+    if (
+      foodName.includes("bean") ||
+      foodName.includes("egg") ||
+      foodName.includes("fish") ||
+      foodName.includes("chicken") ||
+      foodName.includes("meat") ||
+      foodName.includes("milk")
+    ) {
+      message += "This meal may contribute protein to your diet. Consider balancing it with vegetables and other foods that suit your needs. ";
+    } else {
+      message += "For a balanced diet, consider combining this meal with suitable protein sources and vegetables where appropriate. ";
+    }
+
+    if (food.notes) {
+      message += `Food estimate note: ${food.notes} `;
+    }
+
+    message += "Remember that photo-based nutrition values are estimates, not exact measurements. ";
+  } else {
+    message += "Scan a meal in the AI Food Scanner to receive additional food-specific nutrition guidance here. ";
+  }
+
+  
   message += "These recommendations use the wellness information currently available in your app.";
 
   return message;
@@ -1151,6 +1203,8 @@ function getAIInsight() {
               <p>
                 {getAIInsight()}
               </p>
+
+              
 
             </div>
           </div>
