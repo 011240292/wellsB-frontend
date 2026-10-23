@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
   function App() {
 
@@ -49,11 +49,15 @@ import { useEffect, useState } from "react";
   const [saved, setSaved] = useState(false);
  // FOOD PHOTO
  
+// FOOD PHOTO
 const [foodPhoto, setFoodPhoto] = useState("");
+const [foodFile, setFoodFile] = useState(null);
 const [foodMessage, setFoodMessage] = useState("");
 const [foodAnalysis, setFoodAnalysis] = useState(null);
 const [foodLoading, setFoodLoading] = useState(false);
 
+const cameraInputRef = useRef(null);
+const galleryInputRef = useRef(null);
 
   // ==========================================
   // MOBILE SIDEBAR
@@ -137,38 +141,51 @@ const [foodLoading, setFoodLoading] = useState(false);
 
 // FOOD PHOTO UPLOAD
 
-async function handleFoodPhotoUpload(event) {
-  const file = event.target.files[0];
+
+function handleFoodPhotoUpload(event) {
+  const file = event.target.files?.[0];
+
+  // Allow selecting the same photo again later.
+  event.target.value = "";
 
   if (!file) return;
 
   if (!file.type.startsWith("image/")) {
-    alert("Please choose a food image.");
+    setFoodMessage("Please choose a food image.");
     return;
   }
 
   if (file.size > 5 * 1024 * 1024) {
-    alert("Please choose an image smaller than 5 MB.");
+    setFoodMessage("Please choose an image smaller than 5 MB.");
     return;
   }
 
-  // Show the selected photo immediately
   const reader = new FileReader();
 
   reader.onload = () => {
     setFoodPhoto(reader.result);
+    setFoodFile(file);
+    setFoodAnalysis(null);
+    setFoodMessage("✅ Food photo selected. Press Analyze Food to continue.");
+  };
+
+  reader.onerror = () => {
+    setFoodMessage("Could not load this photo. Please try another image.");
   };
 
   reader.readAsDataURL(file);
+}
 
-  // Clear old results and start AI analysis
-  setFoodAnalysis(null);
+async function analyzeFoodPhoto() {
+  if (!foodFile || foodLoading) return;
+
   setFoodLoading(true);
-  setFoodMessage("🔍 AI is identifying your food and estimating calories...");
+  setFoodAnalysis(null);
+  setFoodMessage("🔍 Analysing your food photo...");
 
   try {
     const formData = new FormData();
-    formData.append("image", file);
+    formData.append("image", foodFile);
 
     const response = await fetch(
       "https://wellsb-frontend.onrender.com/analyze-food",
@@ -189,10 +206,27 @@ async function handleFoodPhotoUpload(event) {
   } catch (error) {
     console.error("Food AI error:", error);
     setFoodMessage(
-      "⚠️ Could not analyse the photo. Check that your backend is running and try again."
+      error.message || "Could not analyse the photo. Please try again."
     );
   } finally {
     setFoodLoading(false);
+  }
+}
+
+function removeFoodPhoto() {
+  if (foodLoading) return;
+
+  setFoodPhoto("");
+  setFoodFile(null);
+  setFoodAnalysis(null);
+  setFoodMessage("");
+
+  if (cameraInputRef.current) {
+    cameraInputRef.current.value = "";
+  }
+
+  if (galleryInputRef.current) {
+    galleryInputRef.current.value = "";
   }
 }
 
@@ -706,42 +740,103 @@ function handlePhotoUpload(event) {
         {/* FOOD PHOTO ANALYSIS */}
 
         <div className="section">
-          <h3>📸 AI Food Scanner</h3>
+         <h3>📸 AI Food Scanner</h3>
 
           <p>
             Take a photo or upload a food image to prepare it
             for nutritional analysis.
           </p>
 
-          <div className="ai-box">
-            <label className="photo-upload-button">
-              📷 Take Photo or Upload Food
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleFoodPhotoUpload}
-                hidden
-              />
-            </label>
+          
+<div className="ai-box">
+  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+    <button
+      type="button"
+      className="photo-upload-button"
+      onClick={() => cameraInputRef.current?.click()}
+    >
+      📷 Take Photo
+    </button>
 
-            {foodPhoto && (
-              <div style={{ marginTop: "20px" }}>
-                <img
-                  src={foodPhoto}
-                  alt="Selected food"
-                  style={{
-                    width: "100%",
-                    maxWidth: "350px",
-                    maxHeight: "300px",
-                    objectFit: "contain",
-                    borderRadius: "12px",
-                  }}
-                />
+    <button
+      type="button"
+      className="photo-upload-button"
+      onClick={() => galleryInputRef.current?.click()}
+    >
+      🖼️ Upload from Gallery
+    </button>
+  </div>
 
-                <p>✅ Food photo selected successfully.</p>
-              </div>
-            )}
+  <input
+    ref={cameraInputRef}
+    type="file"
+    accept="image/*"
+    capture="environment"
+    onChange={handleFoodPhotoUpload}
+    hidden
+  />
+
+  <input
+    ref={galleryInputRef}
+    type="file"
+    accept="image/*"
+    onChange={handleFoodPhotoUpload}
+    hidden
+  />
+
+  {foodPhoto && (
+    <div style={{ marginTop: "20px" }}>
+      <img
+        src={foodPhoto}
+        alt="Selected food"
+        style={{
+          width: "100%",
+          maxWidth: "350px",
+          maxHeight: "300px",
+          objectFit: "contain",
+          borderRadius: "12px",
+        }}
+      />
+
+      <p>✅ Food photo selected successfully.</p>
+
+      <div
+        style={{
+          display: "flex",
+          gap: "10px",
+          flexWrap: "wrap",
+          marginTop: "12px",
+        }}
+      >
+        <button
+          type="button"
+          className="primary-button"
+          onClick={analyzeFoodPhoto}
+          disabled={!foodFile || foodLoading}
+        >
+          {foodLoading ? "⏳ Analysing..." : "🔍 Analyze Food"}
+        </button>
+
+        <button
+          type="button"
+          onClick={removeFoodPhoto}
+          disabled={foodLoading}
+          style={{
+            background: "#dc2626",
+            color: "#ffffff",
+            border: "none",
+            borderRadius: "8px",
+            padding: "10px 16px",
+            cursor: foodLoading ? "not-allowed" : "pointer",
+          }}
+        >
+          🗑️ Remove Photo
+        </button>
+      </div>
+    </div>
+  )}
+</div>
+
             {foodMessage && (
   <p role="status">{foodMessage}</p>
 )}
@@ -756,6 +851,7 @@ function handlePhotoUpload(event) {
     <h3>🍽️ AI Food Analysis</h3>
 
     <p>
+
       <strong>Food:</strong> {foodAnalysis.food_name}
     </p>
 
@@ -766,11 +862,11 @@ function handlePhotoUpload(event) {
     </p>
 
     <p>
-      🍞 Carbohydrates: {foodAnalysis.carbs_g} g
+     🍞  Carbohydrates: {foodAnalysis.carbs_g} g
     </p>
 
     <p>
-      🥑 Fat: {foodAnalysis.fat_g} g
+     🥑  Fat: {foodAnalysis.fat_g} g
     </p>
 
     <p>
@@ -778,7 +874,7 @@ function handlePhotoUpload(event) {
     </p>
 
     <p>
-      ℹ️ {foodAnalysis.notes}
+     ℹℹ️ {foodAnalysis.notes}
     </p>
 
     <p>
@@ -787,7 +883,7 @@ function handlePhotoUpload(event) {
   </div>
 )}
 
-          </div>
+
         </div>
         <PageHeader
           title="🥗 Nutrition"
