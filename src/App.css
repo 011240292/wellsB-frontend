@@ -1353,3 +1353,79 @@ footer {
   font-size: 20px;
   font-weight: bold;
 }
+
+
+/* WELLsB Button Colours */
+
+.take-photo-button {
+  background-color: #198754;
+  color: white;
+  border: none;
+  padding: 11px 18px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.gallery-upload-button {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 11px 18px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.sleep-save-button {
+  background-color: #7c3aed;
+  color: white;
+  border: none;
+  padding: 11px 18px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.reminder-save-button {
+  background-color: #198754;
+  color: white;
+  border: none;
+  padding: 11px 18px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+
+/* WELLsB BUTTON COLOURS */
+
+button.take-photo-button,
+.take-photo-button {
+  background: #198754 !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+button.gallery-upload-button,
+.gallery-upload-button {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+button.sleep-save-button,
+.sleep-save-button {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+button.reminder-save-button,
+.reminder-save-button {
+  background: #198754 !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+

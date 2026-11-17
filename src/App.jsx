@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 
   function App() {
 
@@ -47,6 +47,30 @@ import { useEffect, useRef, useState } from "react";
   // ==========================================
 
   const [saved, setSaved] = useState(false);
+  // ==========================================
+// DAILY WATER TRACKING
+// ==========================================
+
+const [currentWater, setCurrentWater] = useState(() => {
+  try {
+    const savedWater = Number(
+      localStorage.getItem("wellsbWaterIntake") || 0
+    );
+
+    return Number.isFinite(savedWater) && savedWater >= 0
+      ? savedWater
+      : 0;
+  } catch {
+    return 0;
+  }
+});
+
+useEffect(() => {
+  localStorage.setItem(
+    "wellsbWaterIntake",
+    String(currentWater)
+  );
+}, [currentWater]);
  // FOOD PHOTO
  
 // FOOD PHOTO
@@ -59,11 +83,267 @@ const [foodLoading, setFoodLoading] = useState(false);
 const cameraInputRef = useRef(null);
 const galleryInputRef = useRef(null);
 
+
+  // ==========================================
+  // FITPRO SMARTWATCH DATA
+  // ==========================================
+
+  const [fitproStepRecords, setFitproStepRecords] = useState([]);
+const [fitproHeartRecords, setFitproHeartRecords] = useState([]);
+const [fitproSleepRecords, setFitproSleepRecords] = useState([]);
+const [fitproLoading, setFitproLoading] = useState(true);
+const [fitproError, setFitproError] = useState("");
+
+  
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadFitProData() {
+    try {
+      const [stepsResponse, heartResponse, sleepResponse] =
+        await Promise.all([
+          fetch("https://wellsb-frontend.onrender.com/fitpro-data?type=steps", {
+            cache: "no-store",
+          }),
+          fetch("https://wellsb-frontend.onrender.com/fitpro-data?type=heart", {
+            cache: "no-store",
+          }),
+          fetch("https://wellsb-frontend.onrender.com/fitpro-data?type=sleep", {
+            cache: "no-store",
+          }),
+        ]);
+
+      if (
+        !stepsResponse.ok ||
+        !heartResponse.ok ||
+        !sleepResponse.ok
+      ) {
+        throw new Error("Could not retrieve FitPro data.");
+      }
+
+      const [stepsData, heartData, sleepData] = await Promise.all([
+        stepsResponse.json(),
+        heartResponse.json(),
+        sleepResponse.json(),
+      ]);
+
+      if (
+        stepsData.status !== "success" ||
+        heartData.status !== "success" ||
+        sleepData.status !== "success"
+      ) {
+        throw new Error("FitPro data could not be loaded.");
+      }
+
+      if (!cancelled) {
+        setFitproStepRecords(Array.isArray(stepsData.records) ? stepsData.records : []);
+setFitproHeartRecords(Array.isArray(heartData.records) ? heartData.records : []);
+setFitproSleepRecords(Array.isArray(sleepData.records) ? sleepData.records : []);
+        setFitproError("");
+      }
+    } catch (error) {
+      console.error("FitPro loading error:", error);
+
+      if (!cancelled) {
+        setFitproError(error.message || "FitPro data unavailable.");
+      }
+    } finally {
+      if (!cancelled) {
+        setFitproLoading(false);
+      }
+    }
+  }
+
+  loadFitProData();
+
+  const refreshTimer = setInterval(loadFitProData, 60000);
+
+  return () => {
+    cancelled = true;
+    clearInterval(refreshTimer);
+  };
+}, []);
+
+
+   
+
   // ==========================================
   // MOBILE SIDEBAR
   // ==========================================
 
   const [mobileMenu, setMobileMenu] = useState(false);
+
+  // ==========================================
+  // SLEEP RECORD AND REMINDERS
+  // ==========================================
+
+  const [sleepRecord, setSleepRecord] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("wellsbSleepRecord")) || {
+        bedtime: "",
+        wakeTime: "",
+      };
+    } catch {
+      return { bedtime: "", wakeTime: "" };
+    }
+  });
+
+  const [wakeAlarm, setWakeAlarm] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("wellsbWakeAlarm")) || {
+        time: "07:00",
+        enabled: false,
+      };
+    } catch {
+      return { time: "07:00", enabled: false };
+    }
+  });
+
+  const [mealReminder, setMealReminder] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("wellsbMealReminder")) || {
+        meal: "Breakfast",
+        time: "08:00",
+        enabled: false,
+      };
+    } catch {
+      return { meal: "Breakfast", time: "08:00", enabled: false };
+    }
+  });
+
+  const [sleepSavedMessage, setSleepSavedMessage] = useState("");
+  const [reminderMessage, setReminderMessage] = useState("");
+
+  const calculatedSleep = (() => {
+    if (!sleepRecord.bedtime || !sleepRecord.wakeTime) return null;
+
+    const [bedHour, bedMinute] = sleepRecord.bedtime.split(":").map(Number);
+    const [wakeHour, wakeMinute] = sleepRecord.wakeTime.split(":").map(Number);
+
+    if (
+      !Number.isFinite(bedHour) ||
+      !Number.isFinite(bedMinute) ||
+      !Number.isFinite(wakeHour) ||
+      !Number.isFinite(wakeMinute)
+    ) {
+      return null;
+    }
+
+    const bedtimeMinutes = bedHour * 60 + bedMinute;
+    let wakeMinutes = wakeHour * 60 + wakeMinute;
+
+    if (wakeMinutes < bedtimeMinutes) {
+      wakeMinutes += 24 * 60;
+    }
+
+    const duration = (wakeMinutes - bedtimeMinutes) / 60;
+    return duration > 0 ? Number(duration.toFixed(2)) : null;
+  })();
+
+
+function saveSleepRecord() {
+  if (
+    !sleepRecord.bedtime ||
+    !sleepRecord.wakeTime ||
+    calculatedSleep === null
+  ) {
+    setSleepSavedMessage(
+      "Please enter a valid bedtime and wake-up time."
+    );
+    return;
+  }
+
+  const recordToSave = {
+    ...sleepRecord,
+    duration: calculatedSleep,
+    savedAt: new Date().toISOString(),
+  };
+
+  localStorage.setItem(
+    "wellsbSleepRecord",
+    JSON.stringify(recordToSave)
+  );
+
+  setSleepSavedMessage(
+    `Sleep record saved: ${calculatedSleep} hours.`
+  );
+}
+
+  async function saveReminders() {
+    const remindersEnabled = wakeAlarm.enabled || mealReminder.enabled;
+
+    if (remindersEnabled) {
+      if (!("Notification" in window)) {
+        setReminderMessage("This browser does not support notifications.");
+        return;
+      }
+
+      let permission = Notification.permission;
+
+      if (permission === "default") {
+        permission = await Notification.requestPermission();
+      }
+
+      if (permission !== "granted") {
+        setReminderMessage("Please allow browser notifications to use reminders.");
+        return;
+      }
+    }
+
+    localStorage.setItem("wellsbWakeAlarm", JSON.stringify(wakeAlarm));
+    localStorage.setItem("wellsbMealReminder", JSON.stringify(mealReminder));
+    setReminderMessage("Your alarm and meal reminder settings have been saved.");
+  }
+
+  // Check saved reminders while WELLsB is open in this browser.
+  useEffect(() => {
+    function checkReminders() {
+      if (!("Notification" in window) || Notification.permission !== "granted") {
+        return;
+      }
+
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(
+        now.getMinutes()
+      ).padStart(2, "0")}`;
+      const today = now.toDateString();
+
+      try {
+        const alarm = JSON.parse(
+          localStorage.getItem("wellsbWakeAlarm") || "{}"
+        );
+        const meal = JSON.parse(
+          localStorage.getItem("wellsbMealReminder") || "{}"
+        );
+
+        if (alarm.enabled && alarm.time === currentTime) {
+          const key = `wellsbWakeAlarm-fired-${today}`;
+          if (localStorage.getItem(key) !== "yes") {
+            new Notification("⌚° WELLsB Wake-up Alarm", {
+              body: "It is time to wake up. Have a great day!",
+            });
+            localStorage.setItem(key, "yes");
+          }
+        }
+
+        if (meal.enabled && meal.time === currentTime) {
+          const key = `wellsbMealReminder-fired-${today}`;
+          if (localStorage.getItem(key) !== "yes") {
+            new Notification(`ðŸ½ï¸ Time for ${meal.meal || "your meal"}`, {
+              body: `Your ${String(meal.meal || "next meal").toLowerCase()} reminder is here.`,
+            });
+            localStorage.setItem(key, "yes");
+          }
+        }
+      } catch (error) {
+        console.error("Reminder check failed:", error);
+      }
+    }
+
+    checkReminders();
+    const reminderTimer = setInterval(checkReminders, 15000);
+    return () => clearInterval(reminderTimer);
+  }, []);
 
   // ==========================================
   // LOAD PROFILE
@@ -181,7 +461,7 @@ async function analyzeFoodPhoto() {
 
   setFoodLoading(true);
   setFoodAnalysis(null);
-  setFoodMessage("🔍 Analysing your food photo...");
+  setFoodMessage("🔍 Analysing your food photo...");
 
   try {
     const formData = new FormData();
@@ -231,8 +511,9 @@ function removeFoodPhoto() {
 }
 
 // Your next existing function stays below
+
 function handlePhotoUpload(event) {
-  const file = event.target.files[0];
+  const file = event.target.files?.[0];
 
   if (!file) return;
 
@@ -249,16 +530,18 @@ function handlePhotoUpload(event) {
   const reader = new FileReader();
 
   reader.onload = () => {
-    try {
-      localStorage.setItem("wellsbProfilePhoto", reader.result);
-      setProfilePhoto(reader.result);
-    } catch (error) {
-      alert("This photo could not be saved. Please choose a smaller image.");
-    }
+    const image = reader.result;
+    setProfilePhoto(image);
+    localStorage.setItem("wellsbProfilePhoto", image);
+  };
+
+  reader.onerror = () => {
+    alert("Could not load the profile photo.");
   };
 
   reader.readAsDataURL(file);
 }
+
   // ==========================================
   // SAVE PROFILE
   // ==========================================
@@ -329,12 +612,138 @@ function handlePhotoUpload(event) {
   // SAMPLE SMARTWATCH DATA
   // ==========================================
 
-  const currentSteps = 6420;
-  const currentSleep = 7.2;
-  const currentWater = 1.8;
-  const caloriesBurned = 428;
-  const activeMinutes = 46;
-  const heartRate = 76;
+  
+
+  // ==========================================
+  // FITPRO AND WELLNESS DATA
+  // ==========================================
+
+  const now = new Date();
+
+  const todayKey =
+    String(now.getFullYear()) +
+    String(now.getMonth() + 1).padStart(2, "0") +
+    String(now.getDate()).padStart(2, "0");
+
+  // Add today's FitPro interval step records.
+  const currentSteps = fitproStepRecords
+    .filter((record) => String(record.date).slice(0, 8) === todayKey)
+    .reduce((total, record) => total + (Number(record.step) || 0), 0);
+
+  // Find the latest imported heart-rate reading.
+  const latestHeartRecord = [...fitproHeartRecords].sort(
+    (a, b) => String(b.date).localeCompare(String(a.date))
+  )[0] || null;
+
+  const heartDate = latestHeartRecord
+    ? String(latestHeartRecord.date).slice(0, 8)
+    : "";
+
+  // Only show heart rate as recent if it was recorded today.
+  const heartRateIsRecent = heartDate === todayKey;
+
+  const heartRate = heartRateIsRecent
+    ? Number(latestHeartRecord.heart)
+    : "--";
+
+  // ==========================================
+  // FITPRO SLEEP STAGE CALCULATIONS
+  // ==========================================
+
+  const fitproSleepSessions = (() => {
+    const sortedRecords = fitproSleepRecords
+      .map((record) => {
+        const rawDate = String(record.date || "");
+        const durationMinutes = Number(record.minutes) || 0;
+
+        if (!/^\d{14}$/.test(rawDate) || durationMinutes <= 0) {
+          return null;
+        }
+
+        const timestamp = new Date(
+          Number(rawDate.slice(0, 4)),
+          Number(rawDate.slice(4, 6)) - 1,
+          Number(rawDate.slice(6, 8)),
+          Number(rawDate.slice(8, 10)),
+          Number(rawDate.slice(10, 12)),
+          Number(rawDate.slice(12, 14))
+        ).getTime();
+
+        if (!Number.isFinite(timestamp)) return null;
+
+        return {
+          timestamp,
+          sleepType: String(record.sleepType),
+          durationMinutes,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    const sessions = [];
+
+    sortedRecords.forEach((record) => {
+      const currentSession = sessions[sessions.length - 1];
+
+      if (
+        !currentSession ||
+        (record.timestamp -
+          currentSession[currentSession.length - 1].timestamp) >
+          60 * 60 * 1000
+      ) {
+        sessions.push([record]);
+      } else {
+        currentSession.push(record);
+      }
+    });
+
+    return sessions.map((session) => {
+      let deepMinutes = 0;
+      let lightMinutes = 0;
+      let awakeMinutes = 0;
+
+      session.forEach((record) => {
+        if (record.sleepType === "1") {
+          deepMinutes += record.durationMinutes;
+        } else if (record.sleepType === "2") {
+          lightMinutes += record.durationMinutes;
+        } else if (record.sleepType === "3") {
+          awakeMinutes += record.durationMinutes;
+        }
+      });
+
+      const totalMinutes =
+        deepMinutes + lightMinutes + awakeMinutes;
+
+      return {
+        startTime: session[0].timestamp,
+        endTime: session[session.length - 1].timestamp,
+        deepMinutes,
+        lightMinutes,
+        awakeMinutes,
+        totalMinutes,
+        totalHours: Number((totalMinutes / 60).toFixed(2)),
+        deepPercent: totalMinutes
+          ? Math.round((deepMinutes / totalMinutes) * 100)
+          : 0,
+        lightPercent: totalMinutes
+          ? Math.round((lightMinutes / totalMinutes) * 100)
+          : 0,
+        awakePercent: totalMinutes
+          ? Math.round((awakeMinutes / totalMinutes) * 100)
+          : 0,
+      };
+    });
+  })();
+
+  const latestFitproSleepSession =
+    fitproSleepSessions[fitproSleepSessions.length - 1] || null;
+
+    const currentSleep = calculatedSleep ?? null;
+
+  // These are not yet verified from FitPro records.
+  const caloriesBurned = 0;
+  const activeMinutes = 0;
 
   // ==========================================
   // GOALS
@@ -349,10 +758,10 @@ function handlePhotoUpload(event) {
     100
   );
 
-  const sleepProgress = Math.min(
-    (currentSleep / sleepGoal) * 100,
-    100
-  );
+  const sleepProgress =
+    currentSleep !== null
+      ? Math.min((currentSleep / sleepGoal) * 100, 100)
+      : 0;
 
   const waterProgress = Math.min(
     (currentWater / waterGoal) * 100,
@@ -402,12 +811,14 @@ if (!profile.fullName) {
   }
 
   // Sleep guidance
-  if (typeof currentSleep !== "undefined" && Number(profile.sleepGoal) > 0) {
+  if (currentSleep !== null && Number(profile.sleepGoal) > 0) {
     if (currentSleep >= Number(profile.sleepGoal)) {
       message += "Your recorded sleep meets your personal goal. Keep maintaining a regular sleep routine. ";
     } else {
       message += "Your recorded sleep is below your personal goal. Consider a consistent bedtime routine. ";
     }
+  } else if (currentSleep === null) {
+    message += "Record your bedtime and wake-up time to receive sleep guidance. ";
   }
 
   // Hydration guidance
@@ -529,8 +940,8 @@ if (!profile.fullName) {
               🟢 System Active
             </span>
             <span className="status-badge watch-status">
-              âŒš Watch Connected
-            </span>
+  ⌚ FitPro Data Imported
+</span>
           </div>
         </div>
 
@@ -573,7 +984,7 @@ if (!profile.fullName) {
             </div>
 
             <div className="card-value blue">
-              {currentSleep} hrs
+              {currentSleep !== null ? `${currentSleep} hrs` : "--"}
             </div>
 
             <div className="card-small">
@@ -616,7 +1027,7 @@ if (!profile.fullName) {
           </div>
 
           <div className="card">
-            <div className="card-icon purple-icon">âš–ï¸</div>
+            <div className="card-icon purple-icon">⚖️</div>
 
             <div className="card-title">
               BMI
@@ -654,7 +1065,7 @@ if (!profile.fullName) {
           <div className="summary-grid">
 
             <div className="summary-card">
-              <div className="summary-icon">â¤ï¸</div>
+              <div className="summary-icon">❤️Â¤Ã¯Â¸Â</div>
 
               <div>
                 <h4>Activity</h4>
@@ -676,8 +1087,9 @@ if (!profile.fullName) {
                 <h4>Sleep</h4>
 
                 <p>
-                  You slept {currentSleep} hours last
-                  night. Your target is {sleepGoal} hours.
+                  {currentSleep !== null
+                    ? `You recorded ${currentSleep} hours of sleep. Your target is ${sleepGoal} hours.`
+                    : `No reliable sleep duration is available yet. Your target is ${sleepGoal} hours. Record your bedtime and wake-up time.`}
                 </p>
               </div>
             </div>
@@ -708,7 +1120,7 @@ if (!profile.fullName) {
               onClick={() => navigateTo("activity")}
               className="quick-btn"
             >
-              â¤ï¸
+              ❤️Â¤Ã¯Â¸Â
               <span>Health & Activity</span>
             </button>
 
@@ -732,7 +1144,7 @@ if (!profile.fullName) {
               onClick={() => navigateTo("ai")}
               className="quick-btn"
             >
-              âœ¨
+              ✨
               <span>AI Insights</span>
             </button>
           </div>
@@ -749,7 +1161,7 @@ if (!profile.fullName) {
     return (
       <>
         <PageHeader
-          title="â¤ï¸ Health & Activity"
+          title="❤️Â¤Ã¯Â¸Â Health & Activity"
           subtitle="Monitor your daily physical activity."
         />
 
@@ -793,7 +1205,7 @@ if (!profile.fullName) {
             />
 
             <ActivityRow
-              icon="🏃"
+              icon="💪"
               title="Exercise"
               value="14 min"
             />
@@ -837,7 +1249,7 @@ if (!profile.fullName) {
   <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
     <button
       type="button"
-      className="photo-upload-button"
+      className="take-photo-button"
       onClick={() => cameraInputRef.current?.click()}
     >
       📷 Take Photo
@@ -845,10 +1257,10 @@ if (!profile.fullName) {
 
     <button
       type="button"
-      className="photo-upload-button"
+      className="gallery-upload-button"
       onClick={() => galleryInputRef.current?.click()}
     >
-      🖼️ Upload from Gallery
+      🖼️ Upload from Gallery
     </button>
   </div>
 
@@ -899,7 +1311,7 @@ if (!profile.fullName) {
           onClick={analyzeFoodPhoto}
           disabled={!foodFile || foodLoading}
         >
-          {foodLoading ? "⏳ Analysing..." : "🔍 Analyze Food"}
+          {foodLoading ? "⌚ Analysing..." : "🔍 Analyze Food"}
         </button>
 
         <button
@@ -915,7 +1327,7 @@ if (!profile.fullName) {
             cursor: foodLoading ? "not-allowed" : "pointer",
           }}
         >
-          🗑️ Remove Photo
+          🗑️ Remove Photo
         </button>
       </div>
     </div>
@@ -928,12 +1340,12 @@ if (!profile.fullName) {
 
            
 {foodLoading && (
-  <p>⏳ Analysing your food photo...</p>
+  <p>⌚³ Analysing your food photo...</p>
 )}
 
 {foodAnalysis && (
   <div className="ai-box" style={{ marginTop: "16px" }}>
-    <h3>🍽️ AI Food Analysis</h3>
+    <h3>ðŸ½ï¸ AI Food Analysis</h3>
 
     <p>
 
@@ -947,7 +1359,7 @@ if (!profile.fullName) {
     </p>
 
     <p>
-     🍞  Carbohydrates: {foodAnalysis.carbs_g} g
+     ðŸž  Carbohydrates: {foodAnalysis.carbs_g} g
     </p>
 
     <p>
@@ -955,11 +1367,11 @@ if (!profile.fullName) {
     </p>
 
     <p>
-      📏 Portion: {foodAnalysis.portion_estimate}
+      📊 Portion: {foodAnalysis.portion_estimate}
     </p>
 
     <p>
-     ℹℹ️ {foodAnalysis.notes}
+     ℹ️ {foodAnalysis.notes}
     </p>
 
     <p>
@@ -1028,151 +1440,473 @@ if (!profile.fullName) {
   // SLEEP
   // ==========================================
 
-  function SleepPage() {
-    return (
-      <>
-        <PageHeader
-          title="🌙 Sleep"
-          subtitle="Understand and improve your sleep habits."
+  
+function SleepPage() {
+  function formatSleepMinutes(minutes) {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+
+    return `${hours}h ${remainingMinutes}m`;
+  }
+
+  const recentSleepSessions = [...fitproSleepSessions]
+    .reverse()
+    .slice(0, 5);
+
+  return (
+    <>
+      <PageHeader
+        title="🌙 Sleep"
+        subtitle="Understand and improve your sleep habits."
+      />
+
+      <div className="cards three-columns">
+        <StatCard
+          title="Sleep Duration"
+          value={currentSleep !== null ? `${currentSleep} hrs` : "--"}
+          description={
+            latestFitproSleepSession
+              ? "Latest imported FitPro session"
+              : calculatedSleep !== null
+              ? "Manually recorded sleep"
+              : "No sleep record available"
+          }
+          color="blue"
+          icon="🌙"
         />
 
-        <div className="cards three-columns">
+        <StatCard
+          title="Deep Sleep"
+          value={
+            latestFitproSleepSession
+              ? formatSleepMinutes(latestFitproSleepSession.deepMinutes)
+              : "--"
+          }
+          description={
+            latestFitproSleepSession
+              ? `${latestFitproSleepSession.deepPercent}% of estimated sleep`
+              : "No imported data"
+          }
+          color="green"
+          icon="💤"
+        />
 
-          <StatCard
-            title="Sleep Duration"
-            value={`${currentSleep} hrs`}
-            description="Last night"
-            color="blue"
-            icon="🌙"
-          />
+        <StatCard
+          title="Sleep Goal"
+          value={`${sleepGoal} hrs`}
+          description="Your personal target"
+          color="purple"
+          icon="🎯"
+        />
+      </div>
 
-          <StatCard
-            title="Sleep Quality"
-            value="Good"
-            description="Based on your data"
-            color="green"
-            icon="âœ¨"
-          />
+      {/* FITPRO SLEEP STAGES */}
 
-          <StatCard
-            title="Sleep Goal"
-            value={`${sleepGoal} hrs`}
-            description="Your target"
-            color="purple"
-            icon="🎯"
-          />
-        </div>
+      <div className="section">
+        <h3>⌚ FitPro Sleep Stage Analysis</h3>
 
-        <div className="section">
-
-          <h3>Sleep Recommendation</h3>
-
-          <div className="ai-box">
-
-            <div className="ai-title">
-              🌙 Better Sleep
-            </div>
+        {latestFitproSleepSession ? (
+          <>
+            <p>
+              Latest imported sleep session:
+              {" "}
+              <strong>
+                {new Date(
+                  latestFitproSleepSession.startTime
+                ).toLocaleDateString()}
+              </strong>
+            </p>
 
             <p>
-              Try maintaining a consistent bedtime and
-              reducing screen exposure before sleeping.
-              WELLsB will use your smartwatch data to
-              monitor your sleep patterns.
+              Estimated total sleep:
+              {" "}
+              <strong>
+                {latestFitproSleepSession.totalHours} hours
+              </strong>
             </p>
+
+            <div className="activity-list">
+              <ActivityRow
+                icon="💤"
+                title="Deep Sleep"
+                value={`${formatSleepMinutes(
+                  latestFitproSleepSession.deepMinutes
+                )} (${latestFitproSleepSession.deepPercent}%)`}
+              />
+
+              <ActivityRow
+                icon="🌙"
+                title="Light Sleep"
+                value={`${formatSleepMinutes(
+                  latestFitproSleepSession.lightMinutes
+                )} (${latestFitproSleepSession.lightPercent}%)`}
+              />
+
+              <ActivityRow
+                icon="👀"
+                title="Awake"
+                value={`${formatSleepMinutes(
+                  latestFitproSleepSession.awakeMinutes
+                )} (${latestFitproSleepSession.awakePercent}%)`}
+              />
+            </div>
+
+            <p className="small-note">
+              These sleep-stage durations are estimates calculated
+              from the timestamps of your imported FitPro records.
+              They may differ from the FitPro app's own summary.
+            </p>
+          </>
+        ) : (
+          <p>
+            No FitPro sleep sessions are available yet.
+            Import your sleep records to see your sleep stages here.
+          </p>
+        )}
+      </div>
+
+      {/* SLEEP HISTORY */}
+
+      <div className="section">
+        <h3>📅 Imported Sleep History</h3>
+
+        {recentSleepSessions.length > 0 ? (
+          <div className="activity-list">
+            {recentSleepSessions.map((session, index) => (
+              <div className="activity-row" key={session.startTime}>
+                <div className="activity-left">
+                  <span className="activity-icon">🌙</span>
+
+                  <span>
+                    {new Date(session.startTime).toLocaleDateString()}
+                  </span>
+                </div>
+
+                <strong>
+                  {session.totalHours} hrs
+                </strong>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p>No imported sleep history is available.</p>
+        )}
+
+        <p className="small-note">
+          Showing up to five of your most recent imported sessions.
+        </p>
+      </div>
+
+      {/* MANUAL SLEEP RECORDING */}
+
+      <div className="section">
+        <h3>📊 Record Your Sleep</h3>
+        <p>
+          Enter the time you went to bed and the time you woke up.
+          WELLsB will calculate your sleep duration automatically.
+        </p>
+
+        <div className="form-grid">
+          <div className="form-group">
+            <label htmlFor="sleep-bedtime">Bedtime</label>
+            <input
+              id="sleep-bedtime"
+              type="time"
+              value={sleepRecord.bedtime}
+              onChange={(event) =>
+                setSleepRecord((previous) => ({
+                  ...previous,
+                  bedtime: event.target.value,
+                }))
+              }
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="sleep-waketime">Wake-up time</label>
+            <input
+              id="sleep-waketime"
+              type="time"
+              value={sleepRecord.wakeTime}
+              onChange={(event) =>
+                setSleepRecord((previous) => ({
+                  ...previous,
+                  wakeTime: event.target.value,
+                }))
+              }
+            />
           </div>
         </div>
-      </>
-    );
-  }
+
+        <p>
+          <strong>Calculated sleep duration: </strong>
+          {calculatedSleep === null
+            ? "Enter both times to calculate"
+            : `${calculatedSleep} hours`}
+        </p>
+
+        <button
+          type="button"
+          className="sleep-save-button"
+          onClick={saveSleepRecord}
+        >
+          💾 Save Sleep Record
+        </button>
+
+        {sleepSavedMessage && (
+          <p role="status">{sleepSavedMessage}</p>
+        )}
+      </div>
+
+      {/* WAKE-UP ALARM */}
+
+      <div className="section">
+        <h3>⌚° Wake-up Alarm</h3>
+
+        <div className="form-group">
+          <label htmlFor="wake-alarm-time">Alarm time</label>
+          <input
+            id="wake-alarm-time"
+            type="time"
+            value={wakeAlarm.time}
+            onChange={(event) =>
+              setWakeAlarm((previous) => ({
+                ...previous,
+                time: event.target.value,
+              }))
+            }
+          />
+        </div>
+
+        <label>
+          <input
+            type="checkbox"
+            checked={wakeAlarm.enabled}
+            onChange={(event) =>
+              setWakeAlarm((previous) => ({
+                ...previous,
+                enabled: event.target.checked,
+              }))
+            }
+          />{" "}
+          Enable wake-up alarm
+        </label>
+      </div>
+
+      {/* MEAL REMINDER */}
+
+      <div className="section">
+        <h3>🍽️ Next Meal Reminder</h3>
+
+        <div className="form-grid">
+          <div className="form-group">
+            <label htmlFor="meal-reminder-type">Meal</label>
+            <select
+              id="meal-reminder-type"
+              value={mealReminder.meal}
+              onChange={(event) =>
+                setMealReminder((previous) => ({
+                  ...previous,
+                  meal: event.target.value,
+                }))
+              }
+            >
+              <option>Breakfast</option>
+              <option>Lunch</option>
+              <option>Supper</option>
+              <option>Snack</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="meal-reminder-time">Reminder time</label>
+            <input
+              id="meal-reminder-time"
+              type="time"
+              value={mealReminder.time}
+              onChange={(event) =>
+                setMealReminder((previous) => ({
+                  ...previous,
+                  time: event.target.value,
+                }))
+              }
+            />
+          </div>
+        </div>
+
+        <label>
+          <input
+            type="checkbox"
+            checked={mealReminder.enabled}
+            onChange={(event) =>
+              setMealReminder((previous) => ({
+                ...previous,
+                enabled: event.target.checked,
+              }))
+            }
+          />{" "}
+          Enable meal reminder
+        </label>
+
+        <p>
+          <button
+            type="button"
+            className="reminder-save-button"
+            onClick={saveReminders}
+          >
+            💾 Save Alarm &amp; Meal Reminder
+          </button>
+        </p>
+
+        {reminderMessage && (
+          <p role="status">{reminderMessage}</p>
+        )}
+
+        <p className="small-note">
+          Reminders use browser notifications and work while WELLsB
+          remains open in this browser. Allow notifications when prompted.
+        </p>
+      </div>
+
+      {/* SLEEP RECOMMENDATION */}
+
+      <div className="section">
+        <h3>Sleep Recommendation</h3>
+
+        <div className="ai-box">
+          <div className="ai-title">🌙 Better Sleep</div>
+
+          <p>
+            Try maintaining a consistent bedtime and reducing screen
+            exposure before sleeping. Monitor your deep, light and
+            awake sleep patterns to understand your sleep habits.
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}
 
   // ==========================================
   // SMARTWATCH
   // ==========================================
 
-  function WatchPage() {
-    return (
-      <>
-        <PageHeader
-          title="âŒš WELLsB Watch"
-          subtitle="Smartwatch connection and health data."
-        />
+  
+function WatchPage() {
+  const latestImportedHeart = latestHeartRecord
+    ? Number(latestHeartRecord.heart ?? latestHeartRecord.heartRate)
+    : null;
 
-        <div className="watch-connected">
-          <span>🟢</span>
-          Connected
+  const heartDateLabel = latestHeartRecord
+    ? `${String(latestHeartRecord.date).slice(6, 8)}/${String(
+        latestHeartRecord.date
+      ).slice(4, 6)}/${String(latestHeartRecord.date).slice(0, 4)}`
+    : "No imported reading";
+
+  return (
+    <>
+      <PageHeader
+        title="⌚ WELLsB Smartwatch"
+        subtitle="View health information imported from your FitPro device."
+      />
+
+      <div className="watch-connected">
+        <span>📡</span>
+        FitPro Data Integration
+      </div>
+
+      <div className="section">
+        <h3>Device Data Status</h3>
+
+        <div className="activity-list">
+          <ActivityRow
+            icon="📱"
+            title="Data Source"
+            value="FitPro"
+          />
+
+          <ActivityRow
+            icon="👟"
+            title="Step Records"
+            value={fitproStepRecords.length}
+          />
+
+          <ActivityRow
+            icon="❤️"
+            title="Heart Rate Records"
+            value={fitproHeartRecords.length}
+          />
+<ActivityRow
+  icon="🌙"
+  title="Sleep Records"
+  value={fitproSleepRecords.length}
+/>
+
+
+          <ActivityRow
+            icon="🔄"
+            title="Data Synchronization"
+            value={fitproLoading ? "Loading..." : fitproError ? "Unavailable" : "Retrieved"}
+          />
         </div>
 
-        <div className="section">
+        {fitproError && (
+          <p role="alert">{fitproError}</p>
+        )}
+      </div>
 
-          <h3>Device Status</h3>
+      <div className="section">
+        <h3>Imported Smartwatch Measurements</h3>
 
-          <div className="activity-list">
+        <div className="watch-grid">
+          <div className="watch-card">
+            <span>💓</span>
+            <strong>
+              {latestImportedHeart && latestImportedHeart > 0
+                ? latestImportedHeart
+                : "--"}
+            </strong>
+            <small>Latest imported BPM</small>
+          </div>
 
-            <ActivityRow
-              icon="⌚"
-              title="Device"
-              value="WELLsB Watch"
-            />
+          <div className="watch-card">
+            <span>👟</span>
+            <strong>{currentSteps.toLocaleString()}</strong>
+            <small>Today's steps</small>
+          </div>
 
-            <ActivityRow
-              icon="🔋"
-              title="Battery"
-              value="82%"
-            />
+          <div className="watch-card">
+            <span>🔥</span>
+            <strong>--</strong>
+            <small>Calories not yet verified</small>
+          </div>
 
-            <ActivityRow
-              icon="📡"
-              title="Connection"
-              value="Connected"
-              greenValue
-            />
+          <div className="watch-card">
+  <span>🌙</span>
+  <strong>{fitproSleepRecords.length}</strong>
+  <small>Imported sleep records</small>
+</div>
 
-            <ActivityRow
-              icon="â¤ï¸"
-              title="Heart Rate"
-              value={`${heartRate} BPM`}
-            />
-
+          <div className="watch-card">
+            <span>📅</span>
+            <strong>{heartDateLabel}</strong>
+            <small>Latest heart-rate record date</small>
           </div>
         </div>
+      </div>
 
-        <div className="section">
+      <div className="section">
+        <h3>Data Information</h3>
+        <p>
+          WELLsB retrieves exported FitPro records through its backend.
+          Measurements are displayed according to the dates recorded
+          by FitPro. They are not necessarily live readings.
+        </p>
+      </div>
+    </>
+  );
+}
 
-          <h3>Smartwatch Data</h3>
-
-          <div className="watch-grid">
-
-            <div className="watch-card">
-              <span>â¤ï¸</span>
-              <strong>{heartRate}</strong>
-              <small>BPM</small>
-            </div>
-
-            <div className="watch-card">
-              <span>👟</span>
-              <strong>
-                {currentSteps.toLocaleString()}
-              </strong>
-              <small>Steps</small>
-            </div>
-
-            <div className="watch-card">
-              <span>🔥</span>
-              <strong>{caloriesBurned}</strong>
-              <small>Calories</small>
-            </div>
-
-            <div className="watch-card">
-              <span>🏃</span>
-              <strong>{activeMinutes}</strong>
-              <small>Active Minutes</small>
-            </div>
-
-          </div>
-        </div>
-      </>
-    );
-  }
 
   // ==========================================
   // AI
@@ -1182,7 +1916,7 @@ if (!profile.fullName) {
     return (
       <>
         <PageHeader
-          title="âœ¨ AI Insights"
+          title="✨ AI Insights"
           subtitle="Personalized wellness recommendations."
         />
 
@@ -1191,7 +1925,7 @@ if (!profile.fullName) {
           <div className="ai-large">
 
             <div className="ai-large-icon">
-              âœ¨
+              ✨
             </div>
 
             <div>
@@ -1228,9 +1962,11 @@ if (!profile.fullName) {
     <h4>Sleep</h4>
     <p>
       {Number(profile.sleepGoal) > 0
-        ? Number(currentSleep) >= Number(profile.sleepGoal)
-          ? `Great! Your recorded sleep of ${currentSleep} hours meets your ${profile.sleepGoal}-hour goal. Maintain a regular sleep schedule.`
-          : `Your recorded sleep is ${currentSleep} hours, compared with your ${profile.sleepGoal}-hour goal. Consider a consistent bedtime routine.`
+        ? currentSleep !== null
+          ? currentSleep >= Number(profile.sleepGoal)
+            ? `Great! Your recorded sleep of ${currentSleep} hours meets your ${profile.sleepGoal}-hour goal. Maintain a regular sleep schedule.`
+            : `Your recorded sleep is ${currentSleep} hours, compared with your ${profile.sleepGoal}-hour goal. Consider a consistent bedtime routine.`
+          : "No reliable sleep duration is available yet. Record your bedtime and wake-up time for personalized sleep advice."
         : "Set your sleep goal in your profile to receive personalized sleep advice."}
     </p>
   </div>
@@ -1264,7 +2000,7 @@ if (!profile.fullName) {
     return (
       <>
         <PageHeader
-          title="âš¡ Energy Balance"
+          title="⚡ Energy Balance"
           subtitle="Understand your daily energy balance."
         />
 
@@ -1291,7 +2027,7 @@ if (!profile.fullName) {
             value="+992"
             description="Estimated balance"
             color="blue"
-            icon="âš¡"
+            icon="⚡"
           />
         </div>
 
@@ -1302,7 +2038,7 @@ if (!profile.fullName) {
           <div className="ai-box">
 
             <div className="ai-title">
-              âš¡ Your Energy Balance
+              ⚡ Your Energy Balance
             </div>
 
             <p>
@@ -1549,7 +2285,7 @@ if (!profile.fullName) {
               value={profile.height || "--"}
               description="centimetres"
               color="green"
-              icon="📏"
+              icon="📊"
             />
 
             <StatCard
@@ -1557,7 +2293,7 @@ if (!profile.fullName) {
               value={profile.weight || "--"}
               description="kilograms"
               color="orange"
-              icon="⚖️"
+              icon="⚖️"
             />
 
             <StatCard
@@ -1609,7 +2345,7 @@ if (!profile.fullName) {
 
             <div className="setting-row">
               <div>
-                <strong>âŒš Watch Sync</strong>
+                <strong>⌚ Watch Sync</strong>
                 <p>Automatically synchronize watch data.</p>
               </div>
 
@@ -1620,7 +2356,7 @@ if (!profile.fullName) {
 
             <div className="setting-row">
               <div>
-                <strong>âœ¨ AI Insights</strong>
+                <strong>✨ AI Insights</strong>
                 <p>Personalized wellness recommendations.</p>
               </div>
 
@@ -1749,117 +2485,52 @@ if (!profile.fullName) {
   // FORM INPUT
   // ==========================================
 
-  function FormInput({
-    label,
-    name,
-    type = "text",
-    value,
-    onChange,
-    placeholder,
-    step,
-    full,
-  }) {
-    return (
-      <div className={`form-group ${full ? "full" : ""}`}>
-
-        <label>
-          {label}
-        </label>
-
-        <input
-          type={type}
-          name={name}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          step={step}
-        />
-
-      </div>
-    );
-  }
+  
 
   // ==========================================
   // FORM SELECT
   // ==========================================
 
-  function FormSelect({
-    label,
-    name,
-    value,
-    onChange,
-    options,
-  }) {
-    return (
-      <div className="form-group">
-
-        <label>
-          {label}
-        </label>
-
-        <select
-          name={name}
-          value={value}
-          onChange={onChange}
-        >
-
-          <option value="">
-            Select {label.toLowerCase()}
-          </option>
-
-          {options.map((option) => (
-            <option
-              key={option}
-              value={option}
-            >
-              {option}
-            </option>
-          ))}
-
-        </select>
-
-      </div>
-    );
-  }
+  
 
   // ==========================================
   // RENDER CURRENT PAGE
   // ==========================================
 
-  function renderPage() {
-    switch (currentPage) {
-      case "dashboard":
-        return <Dashboard />;
-
-      case "activity":
-        return <ActivityPage />;
-
-      case "nutrition":
-        return <NutritionPage />;
-
-      case "sleep":
-        return <SleepPage />;
-
-      case "watch":
-        return <WatchPage />;
-
-      case "ai":
-        return <AIPage />;
-
-      case "energy":
-        return <EnergyPage />;
-
-      case "profile":
   
-        return ProfilePage();
+function renderPage() {
+  switch (currentPage) {
+    case "dashboard":
+      return Dashboard();
 
-      case "settings":
-        return <SettingsPage />;
+    case "activity":
+      return ActivityPage();
 
-      default:
-        return <Dashboard />;
-    }
+    case "nutrition":
+      return NutritionPage();
+
+    case "sleep":
+      return SleepPage();
+
+    case "watch":
+      return WatchPage();
+
+    case "ai":
+      return AIPage();
+
+    case "energy":
+      return EnergyPage();
+
+    case "profile":
+      return ProfilePage();
+
+    case "settings":
+      return SettingsPage();
+
+    default:
+      return Dashboard();
   }
+}
 
   // ==========================================
   // MAIN RETURN
@@ -1898,6 +2569,84 @@ if (!profile.fullName) {
 
         </div>
 
+        {/* SIDEBAR PROFILE PHOTO */}
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "10px",
+          padding: "18px 10px",
+          marginBottom: "8px"
+        }}>
+          {profilePhoto ? (
+            <img
+              src={profilePhoto}
+              alt="Profile"
+              style={{
+                width: "82px",
+                height: "82px",
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "3px solid #8bd5ca"
+              }}
+            />
+          ) : (
+            <div style={{
+              width: "82px",
+              height: "82px",
+              borderRadius: "50%",
+              background: "#dcefeb",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "38px"
+            }}>
+              {"\u{1F464}"}
+            </div>
+          )}
+
+          <strong style={{ fontSize: "14px" }}>
+            {profile.fullName || "WELLsB User"}
+          </strong>
+
+          <label style={{
+            background: "#167d70",
+            color: "white",
+            padding: "9px 16px",
+            borderRadius: "8px",
+            cursor: "pointer",
+            fontSize: "12px",
+            fontWeight: "600"
+          }}>
+            Update Photo
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              style={{ display: "none" }}
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={() => {
+              setProfilePhoto("");
+              localStorage.removeItem("wellsbProfilePhoto");
+            }}
+            style={{
+              background: "transparent",
+              color: "#d9534f",
+              border: "1px solid #d9534f",
+              padding: "7px 14px",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "12px"
+            }}
+          >
+            Remove Photo
+          </button>
+        </div>
+
         <div className="menu-title">
           MAIN
         </div>
@@ -1931,7 +2680,7 @@ if (!profile.fullName) {
         </div>
 
         <NavButton
-          icon="âŒš"
+          icon="⌚"
           label="Smartwatch"
           page="watch"
         />
@@ -1959,7 +2708,7 @@ if (!profile.fullName) {
         />
 
         <NavButton
-          icon="⚙️"
+          icon="⚙️"
           label="Settings"
           page="settings"
         />
@@ -2014,6 +2763,60 @@ if (!profile.fullName) {
   );
 }
 
+
+function FormInput({
+  label,
+  name,
+  type = "text",
+  value,
+  onChange,
+  placeholder,
+  full,
+  step,
+}) {
+  return (
+    <div className={`form-group ${full ? "full" : ""}`}>
+      <label>{label}</label>
+      <input
+        type={type}
+        name={name}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        step={step}
+      />
+    </div>
+  );
+}
+
+
+function FormSelect({
+  label,
+  name,
+  value,
+  onChange,
+  options,
+}) {
+  return (
+    <div className="form-group">
+      <label>{label}</label>
+      <select
+        name={name}
+        value={value}
+        onChange={onChange}
+      >
+        <option value="">
+          Select {label.toLowerCase()}
+        </option>
+
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+  }
+
 export default App;
-
-
