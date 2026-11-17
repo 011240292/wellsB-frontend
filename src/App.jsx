@@ -512,34 +512,71 @@ function removeFoodPhoto() {
 
 // Your next existing function stays below
 
-function handlePhotoUpload(event) {
+
+async function handlePhotoUpload(event) {
   const file = event.target.files?.[0];
 
   if (!file) return;
 
   if (!file.type.startsWith("image/")) {
     alert("Please select an image file.");
+    event.target.value = "";
     return;
   }
 
-  if (file.size > 2 * 1024 * 1024) {
-    alert("Please choose an image smaller than 2 MB.");
+  if (file.size > 15 * 1024 * 1024) {
+    alert("Please choose an image smaller than 15 MB.");
+    event.target.value = "";
     return;
   }
 
-  const reader = new FileReader();
+  const imageUrl = URL.createObjectURL(file);
+  const image = new Image();
 
-  reader.onload = () => {
-    const image = reader.result;
-    setProfilePhoto(image);
-    localStorage.setItem("wellsbProfilePhoto", image);
+  image.onload = () => {
+    try {
+      const canvas = document.createElement("canvas");
+      const maxSize = 600;
+
+      let width = image.width;
+      let height = image.height;
+
+      if (width > height && width > maxSize) {
+        height = Math.round((height * maxSize) / width);
+        width = maxSize;
+      } else if (height > maxSize) {
+        width = Math.round((width * maxSize) / height);
+        height = maxSize;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext("2d");
+      context.drawImage(image, 0, 0, width, height);
+
+      const compressedPhoto = canvas.toDataURL("image/jpeg", 0.75);
+
+      localStorage.setItem("wellsbProfilePhoto", compressedPhoto);
+      setProfilePhoto(compressedPhoto);
+
+      alert("Profile photo updated successfully!");
+    } catch (error) {
+      console.error("Photo compression error:", error);
+      alert("Could not save this photo. Please try another image.");
+    } finally {
+      URL.revokeObjectURL(imageUrl);
+      event.target.value = "";
+    }
   };
 
-  reader.onerror = () => {
-    alert("Could not load the profile photo.");
+  image.onerror = () => {
+    URL.revokeObjectURL(imageUrl);
+    event.target.value = "";
+    alert("Could not open this image. Please try another photo.");
   };
 
-  reader.readAsDataURL(file);
+  image.src = imageUrl;
 }
 
   // ==========================================
