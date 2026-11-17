@@ -4,7 +4,9 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 import os
-import json
+import json 
+import csv
+import io
 
 load_dotenv()
 
@@ -111,6 +113,126 @@ def analyze_food():
         }), 502
 
 
+
+@app.route("/import-fitpro", methods=["POST"])
+def import_fitpro():
+    if "file" not in request.files:
+        return jsonify({"error": "Please select a FitPro CSV file."}), 400
+
+    uploaded_file = request.files["file"]
+    data_type = request.form.get("data_type", "").lower()
+
+    required_columns = {
+        "steps": ["userId", "devid", "date", "mode", "step", "calory", "distance"],
+        "heart": ["userId", "devid", "date", "heart", "spo"],
+        "sleep": ["userId", "devid", "date", "sleepType", "minutes"]
+    }
+
+    if data_type not in required_columns:
+        return jsonify({"error": "Invalid data type. Choose steps, heart, or sleep."}), 400
+
+    if not uploaded_file.filename.lower().endswith(".csv"):
+        return jsonify({"error": "Please upload a CSV file."}), 400
+
+    try:
+        content = uploaded_file.read().decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(content))
+
+        if not reader.fieldnames:
+            return jsonify({"error": "The CSV file is empty."}), 400
+
+        reader.fieldnames = [name.strip() for name in reader.fieldnames]
+
+        missing = [
+            column for column in required_columns[data_type]
+            if column not in reader.fieldnames
+        ]
+
+        if missing:
+            return jsonify({
+                "error": "Incorrect FitPro CSV format.",
+                "missing_columns": missing
+            }), 400
+
+        records = list(reader)
+
+        if not records:
+            return jsonify({"error": "No smartwatch records found."}), 400
+
+        # Save the imported records so the frontend can retrieve them later
+        storage_folder = os.path.join(os.path.dirname(__file__), "fitpro-data")
+        os.makedirs(storage_folder, exist_ok=True)
+
+        storage_file = os.path.join(storage_folder, "imported_fitpro.json")
+
+        saved_data = {}
+
+        if os.path.exists(storage_file):
+            with open(storage_file, "r", encoding="utf-8") as file:
+                saved_data = json.load(file)
+
+        # Replace the previous import of this data type
+        saved_data[data_type] = records
+
+        with open(storage_file, "w", encoding="utf-8") as file:
+            json.dump(saved_data, file, indent=4)
+        return jsonify({
+            "status": "success",
+            "message": "FitPro data imported successfully.",
+            "data_type": data_type,
+            "total_records": len(records),
+            "records": records
+        }), 200
+
+    except UnicodeDecodeError:
+        return jsonify({"error": "Could not read this CSV file."}), 400
+
+    except Exception:
+        app.logger.exception("FitPro import failed")
+        return jsonify({"error": "FitPro import failed."}), 500
+
+@app.route("/fitpro-data", methods=["GET"])
+def get_fitpro_data():
+    storage_file = os.path.join(
+        os.path.dirname(__file__),
+        "fitpro-data",
+        "imported_fitpro.json"
+    )
+
+    if not os.path.exists(storage_file):
+        return jsonify({
+            "status": "success",
+            "records": {
+                "steps": [],
+                "heart": [],
+                "sleep": []
+            }
+        })
+
+    try:
+        with open(storage_file, "r", encoding="utf-8") as file:
+            saved_data = json.load(file)
+
+        data_type = request.args.get("type")
+
+        if data_type:
+            if data_type not in ["steps", "heart", "sleep"]:
+                return jsonify({"error": "Invalid data type."}), 400
+
+            return jsonify({
+                "status": "success",
+                "data_type": data_type,
+                "records": saved_data.get(data_type, [])
+            })
+
+        return jsonify({
+            "status": "success",
+            "records": saved_data
+        })
+
+    except Exception:
+        app.logger.exception("Could not retrieve FitPro data")
+        return jsonify({"error": "Could not retrieve FitPro data."}), 500
 @app.errorhandler(413)
 def file_too_large(error):
     return jsonify({
