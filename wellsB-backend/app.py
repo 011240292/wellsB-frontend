@@ -214,22 +214,7 @@ def save_fitpro_records(data_type, records):
 
 
 def load_fitpro_records():
-    """Read records from Supabase, or local JSON during local development."""
-    client = get_supabase_client()
-
-    if client:
-        response = client.table("fitpro_records").select(
-            "data_type, records"
-        ).execute()
-
-        saved_data = {"steps": [], "heart": [], "sleep": []}
-
-        for row in response.data or []:
-            category = row.get("data_type")
-            if category in saved_data:
-                saved_data[category] = row.get("records") or []
-
-        return saved_data
+    """Read FitPro records directly from the local JSON backup."""
 
     storage_file = get_local_fitpro_file()
 
