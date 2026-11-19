@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# WELLsB private backend files
+wellsB-backend/.env
+wellsB-backend/venv/
+wellsB-backend/__pycache__/

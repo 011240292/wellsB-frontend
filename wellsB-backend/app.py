@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+﻿from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from google import genai
@@ -7,6 +7,8 @@ import os
 import json 
 import csv
 import io
+from datetime import datetime, timezone
+from supabase import create_client
 
 load_dotenv()
 
@@ -67,23 +69,76 @@ def analyze_food():
         client = genai.Client(api_key=api_key)
 
         prompt = """
-        Examine this food photo and estimate its nutritional content.
-        Return ONLY valid JSON with these fields:
-        {
-          "food_name": "best estimate of the food",
-          "portion_estimate": "estimated portion size",
-          "calories": 0,
-          "protein_g": 0,
-          "carbs_g": 0,
-          "fat_g": 0,
-          "confidence": "low, medium, or high",
-          "notes": "brief explanation of uncertainty"
-        }
-        Use numeric values for calories and nutrients.
-        Estimate only what is visible. Do not claim exact measurements.
-        If the image does not show recognizable food, say so in food_name
-        and explain that in notes.
-        """
+You are the AI food recognition and nutrition analysis system
+for WELLsB Smart Wellness.
+
+Your task is to identify and analyse ANY edible food or drink
+visible in the uploaded image.
+
+IMPORTANT: Do not restrict recognition to specific meals or a
+predefined food list.
+
+Recognise a wide variety of edible items, including:
+
+1. Traditional and international meals.
+2. Cooked and raw foods.
+3. Fruits and vegetables.
+4. Snacks, sweets, desserts and confectionery.
+5. Bread, cakes, biscuits and pastries.
+6. Drinks and beverages, including water, juice, milk, tea,
+   coffee, smoothies and soft drinks.
+7. Dairy products, eggs, meat, fish and seafood.
+8. Nuts, seeds, cereals and grains.
+9. Packaged foods and visible food products.
+10. Sauces, soups, spreads and other edible ingredients.
+
+Recognise local Ugandan and African foods as well as foods
+from other parts of the world.
+
+If the image contains multiple edible items, identify each
+recognisable item separately.
+
+Estimate the portion size and nutritional content of each
+item, then calculate the combined nutritional totals.
+
+Include:
+- Food or drink names.
+- Estimated portion sizes.
+- Calories in kcal.
+- Protein in grams.
+- Carbohydrates in grams.
+- Fat in grams.
+
+For drinks, estimate nutritional values according to their
+visible type. Do not assume every drink contains calories.
+For plain water, estimate zero calories and zero macronutrients.
+
+Do not invent foods that are not visible.
+If an item is unclear, explain the uncertainty.
+Do not claim exact nutritional measurements.
+Use reasonable estimates based on visible portions.
+
+Return ONLY valid JSON using exactly these fields:
+
+{
+  "food_name": "Names of all identified foods and drinks",
+  "portion_estimate": "Estimated portion of each item",
+  "calories": 0,
+  "protein_g": 0,
+  "carbs_g": 0,
+  "fat_g": 0,
+  "confidence": "low, medium, or high",
+  "notes": "Identified items, combined nutritional estimates and any uncertainty"
+}
+
+Use numeric values for calories and nutrients.
+Ensure the nutritional totals represent all identified items
+combined, not just the first item.
+
+If no recognizable edible item is visible, explain this
+clearly in food_name and notes.
+"""
+
 
         response = client.models.generate_content(
             model="gemini-3.5-flash-lite",
@@ -114,6 +169,83 @@ def analyze_food():
 
 
 
+
+
+def get_supabase_client():
+    """Connect to Supabase only when its environment variables are available."""
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+    if not url or not key:
+        return None
+
+    return create_client(url, key)
+
+
+def get_local_fitpro_file():
+    folder = os.path.join(os.path.dirname(__file__), "fitpro-data")
+    os.makedirs(folder, exist_ok=True)
+    return os.path.join(folder, "imported_fitpro.json")
+
+
+def save_fitpro_records(data_type, records):
+    """Save records to Supabase, or local JSON during local development."""
+    client = get_supabase_client()
+
+    if client:
+        client.table("fitpro_records").upsert({
+            "data_type": data_type,
+            "records": records,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }, on_conflict="data_type").execute()
+        return
+
+    storage_file = get_local_fitpro_file()
+    saved_data = {}
+
+    if os.path.exists(storage_file):
+        with open(storage_file, "r", encoding="utf-8") as file:
+            saved_data = json.load(file)
+
+    saved_data[data_type] = records
+
+    with open(storage_file, "w", encoding="utf-8") as file:
+        json.dump(saved_data, file, indent=4)
+
+
+def load_fitpro_records():
+    """Read records from Supabase, or local JSON during local development."""
+    client = get_supabase_client()
+
+    if client:
+        response = client.table("fitpro_records").select(
+            "data_type, records"
+        ).execute()
+
+        saved_data = {"steps": [], "heart": [], "sleep": []}
+
+        for row in response.data or []:
+            category = row.get("data_type")
+            if category in saved_data:
+                saved_data[category] = row.get("records") or []
+
+        return saved_data
+
+    storage_file = get_local_fitpro_file()
+
+    if not os.path.exists(storage_file):
+        return {"steps": [], "heart": [], "sleep": []}
+
+    with open(storage_file, "r", encoding="utf-8") as file:
+        saved_data = json.load(file)
+
+    return {
+        "steps": saved_data.get("steps", []),
+        "heart": saved_data.get("heart", []),
+        "sleep": saved_data.get("sleep", [])
+    }
+
+
 @app.route("/import-fitpro", methods=["POST"])
 def import_fitpro():
     if "file" not in request.files:
@@ -131,7 +263,7 @@ def import_fitpro():
     if data_type not in required_columns:
         return jsonify({"error": "Invalid data type. Choose steps, heart, or sleep."}), 400
 
-    if not uploaded_file.filename.lower().endswith(".csv"):
+    if not uploaded_file.filename or not uploaded_file.filename.lower().endswith(".csv"):
         return jsonify({"error": "Please upload a CSV file."}), 400
 
     try:
@@ -159,23 +291,8 @@ def import_fitpro():
         if not records:
             return jsonify({"error": "No smartwatch records found."}), 400
 
-        # Save the imported records so the frontend can retrieve them later
-        storage_folder = os.path.join(os.path.dirname(__file__), "fitpro-data")
-        os.makedirs(storage_folder, exist_ok=True)
+        save_fitpro_records(data_type, records)
 
-        storage_file = os.path.join(storage_folder, "imported_fitpro.json")
-
-        saved_data = {}
-
-        if os.path.exists(storage_file):
-            with open(storage_file, "r", encoding="utf-8") as file:
-                saved_data = json.load(file)
-
-        # Replace the previous import of this data type
-        saved_data[data_type] = records
-
-        with open(storage_file, "w", encoding="utf-8") as file:
-            json.dump(saved_data, file, indent=4)
         return jsonify({
             "status": "success",
             "message": "FitPro data imported successfully.",
@@ -189,30 +306,13 @@ def import_fitpro():
 
     except Exception:
         app.logger.exception("FitPro import failed")
-        return jsonify({"error": "FitPro import failed."}), 500
+        return jsonify({"error": "FitPro import failed. Check the backend logs."}), 500
+
 
 @app.route("/fitpro-data", methods=["GET"])
 def get_fitpro_data():
-    storage_file = os.path.join(
-        os.path.dirname(__file__),
-        "fitpro-data",
-        "imported_fitpro.json"
-    )
-
-    if not os.path.exists(storage_file):
-        return jsonify({
-            "status": "success",
-            "records": {
-                "steps": [],
-                "heart": [],
-                "sleep": []
-            }
-        })
-
     try:
-        with open(storage_file, "r", encoding="utf-8") as file:
-            saved_data = json.load(file)
-
+        saved_data = load_fitpro_records()
         data_type = request.args.get("type")
 
         if data_type:
@@ -233,6 +333,8 @@ def get_fitpro_data():
     except Exception:
         app.logger.exception("Could not retrieve FitPro data")
         return jsonify({"error": "Could not retrieve FitPro data."}), 500
+
+
 @app.errorhandler(413)
 def file_too_large(error):
     return jsonify({
